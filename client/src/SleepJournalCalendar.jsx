@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import api from "./api";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DAYS_SHORT = ["S", "M", "T", "W", "T", "F", "S"];
@@ -123,7 +123,7 @@ function SleepJournalCalendar() {
 
     useEffect(() => {
         if (userId) {
-            axios.get(`http://localhost:5000/sleep/${userId}`)
+            api.get(`/sleep/${userId}`)
             .then(res => setEntryMap(buildEntryMap(res.data)))
             .catch(err => console.log(err));
         }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import api from "./api";
 
 const moods = [
     { label: "Happy", emoji: "😊" },
@@ -33,15 +33,9 @@ const activities = [
     "Hiking", "Friends", "Alone Time", "Movie", "Hobbies"
 ];
 
-const journalMock = [
-    { month: "Jan", avg: 10 },
-    { month: "Feb", avg: 23 },
-    { month: "Mar", avg: 19 },
-    { month: "Apr", avg: 28 },
-];
 
 function GoalLineChart({ data }) {
-    const maxVal = 35;
+    const maxVal = Math.max(...data.map(d => d.avg), 1);
     const w = 260;
     const h = 90;
     const padX = 16;
@@ -90,9 +84,15 @@ function DailyJournal() {
 
     useEffect(() => {
         if (userId) {
-            axios.get(`http://localhost:5000/journal/${userId}`)
+            api.get(`/journal/${userId}`)
                 .then(res => setEntries(res.data))
                 .catch(err => console.log(err))
+        }
+        // If user came from the home page quick note, pre-fill the journal text
+        const quickNote = localStorage.getItem("quickNote");
+        if (quickNote) {
+            setJournalText(quickNote);
+            localStorage.removeItem("quickNote");
         }
     }, [userId]);
 
@@ -105,6 +105,57 @@ function DailyJournal() {
             setSelectedActivities([...selectedActivities, activity]);
         }
     }
+
+    const moodScores = {
+        "Happy": 5, "Excited": 5, "Hopeful": 5, "Grateful": 5, "Loved": 5,
+        "Calm": 4, "Neutral": 3, "Confused": 3, "Tired": 2,
+        "Worried": 2, "Anxious": 2, "Sad": 1, "Frustrated": 1,
+        "Stressed": 1, "Angry": 1, "Overwhelmed": 1,
+    };
+
+    const streak = (() => {
+        if (entries.length === 0) return 0;
+        const entryDates = new Set(entries.map(e => {
+            const d = new Date(e.date);
+            d.setHours(0, 0, 0, 0);
+            return d.toDateString();
+        }));
+        let count = 0;
+        const current = new Date();
+        current.setHours(0, 0, 0, 0);
+        while (entryDates.has(current.toDateString())) {
+            count++;
+            current.setDate(current.getDate() - 1);
+        }
+        return count;
+    })();
+
+    const avgMoodEmoji = (() => {
+        const weekStart = new Date();
+        weekStart.setDate(weekStart.getDate() - 6);
+        weekStart.setHours(0, 0, 0, 0);
+        const weekEntries = entries.filter(e => new Date(e.date) >= weekStart);
+        if (weekEntries.length === 0) return "—";
+        const avg = weekEntries.reduce((sum, e) => sum + (moodScores[e.mood] || 3), 0) / weekEntries.length;
+        if (avg >= 4.5) return "😊";
+        if (avg >= 3.5) return "🙂";
+        if (avg >= 2.5) return "😐";
+        if (avg >= 1.5) return "😟";
+        return "😢";
+    })();
+
+    const journalTrend = (() => {
+        if (entries.length === 0) return [{ month: "—", avg: 0 }];
+        const monthMap = {};
+        entries.forEach(entry => {
+            const d = new Date(entry.date);
+            const key = `${d.getFullYear()}-${d.getMonth()}`;
+            const label = d.toLocaleDateString("en-US", { month: "short" });
+            if (!monthMap[key]) monthMap[key] = { month: label, avg: 0, sort: d.getFullYear() * 12 + d.getMonth() };
+            monthMap[key].avg++;
+        });
+        return Object.values(monthMap).sort((a, b) => a.sort - b.sort).slice(-4);
+    })();
 
     function handleSubmit() {
         if (!selectedMood) {
@@ -120,10 +171,10 @@ function DailyJournal() {
             activities: selectedActivities.map(a => ({ name: a })),
         };
 
-        axios.post("http://localhost:5000/journal", newEntry)
+        api.post("/journal", newEntry)
             .then(() => {
                 // Re-fetch all entries from the server so the list is always consistent
-                return axios.get(`http://localhost:5000/journal/${userId}`)
+                return api.get(`/journal/${userId}`)
             })
             .then(res => {
                 console.log("userId:", userId);
@@ -131,7 +182,7 @@ function DailyJournal() {
                 setEntries(res.data);
                 setSelectedMood(null);
                 setSelectedActivities([]);
-                setRestfulness(null);
+                setRestfulness(0);
                 setJournalText("");
                 setSubmitted(true);
                 setTimeout(function() { setSubmitted(false); }, 3000);
@@ -146,7 +197,7 @@ function DailyJournal() {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
                 <button className="back-btn" onClick={() => navigate("/home")}>← Back</button>
                 <h1 className="home-title" style={{ fontSize: "1.8rem", margin: 0 }}>📓 Daily Journal</h1>
-                <div style={{ width: "80px" }} />
+                <button className="back-btn" onClick={() => navigate("/journal/calendar")}>📅 Calendar</button>
             </div>
 
             {/* Main 2-column grid */}
@@ -275,8 +326,8 @@ function DailyJournal() {
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px" }}>
                         {[
                             { label: "Entries", value: `${entries.length}`, sub: "total logged", icon: "📓" },
-                            { label: "Streak", value: "5 days", sub: "keep going!", icon: "🔥" },
-                            { label: "Mood", value: "😊", sub: "avg this week", icon: "✨" },
+                            { label: "Streak", value: `${streak} day${streak !== 1 ? "s" : ""}`, sub: "keep going!", icon: "🔥" },
+                            { label: "Mood", value: avgMoodEmoji, sub: "avg this week", icon: "✨" },
                         ].map(s => (
                             <div key={s.label} className="home-card" style={{ padding: "12px 8px", gap: "4px" }}>
                                 <div style={{ fontSize: "1.4rem" }}>{s.icon}</div>
@@ -303,9 +354,9 @@ function DailyJournal() {
                                             <p className="text-color" style={{ fontWeight: 800, fontSize: "0.9rem", margin: 0 }}>
                                                 {moodObj ? moodObj.emoji : ""} {entry.mood}
                                             </p>
-                                            {typeof entry.restfulness === "number" && (
+                                            {typeof entry.restedRating === "number" && (
                                                 <p className="text-color" style={{ margin: 0, fontSize: "0.78rem" }}>
-                                                    😴 {restfulOptions[entry.restfulness].emoji} {restfulOptions[entry.restfulness].label}
+                                                    😴 {restfulOptions[entry.restedRating]?.emoji} {restfulOptions[entry.restedRating]?.label}
                                                 </p>
                                             )}
                                             {entry.activities && entry.activities.length > 0 && (
@@ -334,8 +385,8 @@ function DailyJournal() {
                     )}
                     <div>
                         <div className="home-card" style={{ padding: "14px 16px", alignItems: "stretch", gap: "6px" }}>
-                            <p className="login-label" style={{ fontSize: "0.9rem", margin: 0 }}>📈 Goals Completed Trend</p>
-                            <GoalLineChart data={journalMock} />
+                            <p className="login-label" style={{ fontSize: "0.9rem", margin: 0 }}>📈 Entries per Month</p>
+                            <GoalLineChart data={journalTrend} />
                         </div>
                     </div>
                 </div>

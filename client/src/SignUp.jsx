@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import axios from "axios";
+import api from "./Api";
 import { useNavigate, Link } from "react-router-dom";
 import DayByDayLogo from "./assets/DayByDay.svg";
 
@@ -17,9 +17,10 @@ function Signup() {
         setLoading(true);
 
         try {
-            const result = await axios.post("http://localhost:5000/signup", { name, email, password });
+            const result = await api.post("/signup", { name, email, password });
 
             if (result.data.status === "Success") {
+                localStorage.setItem("token", result.data.token);
                 localStorage.setItem("userId", result.data.userId);
                 localStorage.setItem("userName", result.data.name);
                 navigate("/home");

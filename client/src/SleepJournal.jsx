@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import api from "./api";
 
 const qualityOptions = [
     { label: "Terrible", emoji: "😵" },
@@ -17,34 +17,15 @@ const restfulOptions = [
     { label: "Well Rested", emoji: "🌟" },
 ];
 
-// Hardcoded mock data — swap in real DB data when ready
-const weeklyMock = [
-    { day: "Mon", duration: 8.5 },
-    { day: "Tue", duration: 7 },
-    { day: "Wed", duration: 6.5 },
-    { day: "Thu", duration: 8 },
-    { day: "Fri", duration: 7.5 },
-    { day: "Sat", duration: 9 },
-    { day: "Sun", duration: 8 },
-];
-
-const typeMock = [
-    { name: "Great",  pct: 35, emoji: "🌟" },
-    { name: "Good",   pct: 40, emoji: "😊" },
-    { name: "Okay",   pct: 15, emoji: "😐" },
-    { name: "Poor",   pct: 7,  emoji: "😞" },
-    { name: "Terrible", pct: 3, emoji: "😵" },
-];
-
-const trendMock = [
-    { month: "Jan", avg: 7.2 },
-    { month: "Feb", avg: 7.5 },
-    { month: "Mar", avg: 6.8 },
-    { month: "Apr", avg: 7.8 },
-];
+function parseDurationHours(duration) {
+    if (!duration) return 0;
+    const h = duration.match(/(\d+)h/);
+    const m = duration.match(/(\d+)m/);
+    return (h ? parseInt(h[1]) : 0) + (m ? parseInt(m[1]) / 60 : 0);
+}
 
 function LineChart({ data }) {
-    const maxVal = 10;
+    const maxVal = Math.max(...data.map(d => d.avg), 1);
     const w = 260;
     const h = 90;
     const padX = 16;
@@ -120,9 +101,60 @@ function SleepJournal() {
     const userId = localStorage.getItem("userId");
     const duration = calculateDuration(bedtime, waketime);
 
+    const weeklyData = (() => {
+        const today = new Date();
+        return Array.from({ length: 7 }, (_, i) => {
+            const d = new Date(today);
+            d.setDate(today.getDate() - (6 - i));
+            const label = d.toLocaleDateString("en-US", { weekday: "short" });
+            const entry = entries.find(e => new Date(e.date).toDateString() === d.toDateString());
+            return { day: label, duration: entry ? Math.round(parseDurationHours(entry.duration) * 10) / 10 : 0 };
+        });
+    })();
+
+    const typeData = (() => {
+        if (entries.length === 0) return [];
+        const counts = {};
+        qualityOptions.forEach(q => { counts[q.label] = 0; });
+        entries.forEach(e => { if (e.quality && counts[e.quality] !== undefined) counts[e.quality]++; });
+        return qualityOptions
+            .map(q => ({ name: q.label, emoji: q.emoji, pct: Math.round((counts[q.label] / entries.length) * 100) }))
+            .filter(q => q.pct > 0);
+    })();
+
+    const trendData = (() => {
+        if (entries.length === 0) return [{ month: "—", avg: 0 }];
+        const monthMap = {};
+        entries.forEach(e => {
+            const d = new Date(e.date);
+            const key = `${d.getFullYear()}-${d.getMonth()}`;
+            const label = d.toLocaleDateString("en-US", { month: "short" });
+            if (!monthMap[key]) monthMap[key] = { month: label, total: 0, count: 0, sort: d.getFullYear() * 12 + d.getMonth() };
+            monthMap[key].total += parseDurationHours(e.duration);
+            monthMap[key].count++;
+        });
+        return Object.values(monthMap)
+            .sort((a, b) => a.sort - b.sort)
+            .slice(-4)
+            .map(m => ({ month: m.month, avg: Math.round((m.total / m.count) * 10) / 10 }));
+    })();
+
+    const nightsThisWeek = weeklyData.filter(d => d.duration > 0).length;
+
+    const allHours = entries.map(e => parseDurationHours(e.duration)).filter(h => h > 0);
+    const avgDuration = allHours.length > 0
+        ? (allHours.reduce((a, b) => a + b, 0) / allHours.length).toFixed(1) + " hr"
+        : "—";
+
+    const bestEntry = entries.reduce((best, e) => {
+        return parseDurationHours(e.duration) > parseDurationHours(best?.duration || "") ? e : best;
+    }, null);
+    const bestDuration = bestEntry ? parseDurationHours(bestEntry.duration).toFixed(1) + " hr" : "—";
+    const bestDay = bestEntry ? new Date(bestEntry.date).toLocaleDateString("en-US", { weekday: "long" }) : "—";
+
     useEffect(() => {
         if (userId) {
-            axios.get(`http://localhost:5000/sleep/${userId}`)
+            api.get(`/sleep/${userId}`)
             .then(res => setEntries(res.data))
             .catch(err => console.log(err))
         }
@@ -143,13 +175,13 @@ function SleepJournal() {
             bedtime: bedtime,
             waketime: waketime,
             duration: duration,
-            quality: quality,
+            quality: quality?.label,
             restfulness: restfulness,
             notes: notes,
         };
 
-        axios.post("http://localhost:5000/sleep", newEntry)
-        .then(() => axios.get(`http://localhost:5000/sleep/${userId}`))
+        api.post("/sleep", newEntry)
+        .then(() => api.get(`/sleep/${userId}`))
         .then(res => {
             setEntries(res.data);
             setBedtime("");
@@ -323,9 +355,9 @@ function SleepJournal() {
                      {/* Quick stats */}
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px" }}>
                         {[
-                            { label: "This Week", value: "5", sub: "nights", icon: "🌙" },
-                            { label: "Avg Duration", value: "7.5 hr", sub: "per night", icon: "⏳" },
-                            { label: "Best Sleep", value: "9 hr", sub: "Saturday", icon: "🌟" },
+                            { label: "This Week", value: `${nightsThisWeek}`, sub: "nights", icon: "🌙" },
+                            { label: "Avg Duration", value: avgDuration, sub: "per night", icon: "⏳" },
+                            { label: "Best Sleep", value: bestDuration, sub: bestDay, icon: "🌟" },
                         ].map(function(s) {
                             return (
                                 <div key={s.label} className="home-card" style={{ padding: "12px 8px", gap: "4px" }}>
@@ -341,7 +373,8 @@ function SleepJournal() {
                     <div className="home-card" style={{ padding: "14px 16px", alignItems: "stretch", gap: "8px" }}>
                         <p className="login-label" style={{ fontSize: "0.9rem", margin: 0 }}>📅 Weekly Sleep</p>
                         <div style={{ display: "flex", alignItems: "flex-end", gap: "6px", height: "80px" }}>
-                            {weeklyMock.map(function(d) {
+                            {weeklyData.map(function(d) {
+                                const maxBar = Math.max(...weeklyData.map(x => x.duration), 1);
                                 const barH = d.duration > 0 ? Math.max((d.duration / maxBar) * 60, 10) : 4;
                                 return (
                                     <div key={d.day} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", gap: "4px", height: "100%" }}>
@@ -366,7 +399,7 @@ function SleepJournal() {
                     <div className="home-card" style={{ padding: "14px 16px", alignItems: "stretch", gap: "8px" }}>
                         <p className="login-label" style={{ fontSize: "0.9rem", margin: 0 }}>🏆 Weekly Quality Breakdown</p>
                         <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
-                            {typeMock.map(function(t) {
+                            {typeData.map(function(t) {
                                 return (
                                     <div key={t.name} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                                         <span style={{ width: "20px", textAlign: "center", fontSize: "0.9rem" }}>{t.emoji}</span>
@@ -383,7 +416,7 @@ function SleepJournal() {
                      {/* Duration trend line chart */}
                     <div className="home-card" style={{ padding: "14px 16px", alignItems: "stretch", gap: "6px" }}>
                         <p className="login-label" style={{ fontSize: "0.9rem", margin: 0 }}>📈 Average Hours of Sleep per Night</p>
-                        <LineChart data={trendMock} />
+                        <LineChart data={trendData} />
                     </div>
                 </div>
             </div>
@@ -422,4 +455,3 @@ function SleepJournal() {
 }
 
 export default SleepJournal;
-

@@ -1,24 +1,39 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import api from "./api";
 
 function Profile({setTheme, theme}) {
     const navigate = useNavigate();
 
-    const [name, setName] = useState("Your Name");
-    const [email, setEmail] = useState("your@email.com");
+    const userId = localStorage.getItem("userId");
+
+    const [name, setName] = useState("");
+    const [email, setEmail] = useState("");
     const [editing, setEditing] = useState(false);
-    const [tempName, setTempName] = useState("Your Name");
-    const [tempEmail, setTempEmail] = useState("your@email.com");
+    const [tempName, setTempName] = useState("");
+    const [tempEmail, setTempEmail] = useState("");
     const [profilePic, setProfilePic] = useState(null);
     const [saved, setSaved] = useState(false);
+    const [stats, setStats] = useState({ journal: 0, sleep: 0, workout: 0, growth: 0 });
     const fileInputRef = useRef(null);
 
-    const stats = [
-        { label: "Journal Entries", emoji: "📓", count: 0 },
-        { label: "Sleep Entries", emoji: "😴", count: 0 },
-        { label: "Workout Entries", emoji: "💪", count: 0 },
-        { label: "Growth Entries", emoji: "🌱", count: 0 },
-    ];
+    // Load user profile and stats on mount
+    useEffect(() => {
+        if (userId) {
+            api.get(`/user/${userId}`)
+            .then(res => {
+                setName(res.data.name || "");
+                setEmail(res.data.email || "");
+                setTempName(res.data.name || "");
+                setTempEmail(res.data.email || "");
+            })
+            .catch(err => console.log(err));
+
+            api.get(`/stats/${userId}`)
+            .then(res => setStats(res.data))
+            .catch(err => console.log(err));
+        }
+    }, [userId]);
 
     function handleImageChange(e) {
         const file = e.target.files[0];
@@ -33,13 +48,15 @@ function Profile({setTheme, theme}) {
     }
 
     function handleSave() {
-        setName(tempName);
-        setEmail(tempEmail);
-        setEditing(false);
-        setSaved(true);
-        setTimeout(function() {
-            setSaved(false);
-        }, 3000);
+        api.put(`/user/${userId}`, { name: tempName, email: tempEmail })
+        .then(res => {
+            setName(res.data.name);
+            setEmail(res.data.email);
+            setEditing(false);
+            setSaved(true);
+            setTimeout(function() { setSaved(false); }, 3000);
+        })
+        .catch(err => console.log(err));
     }
 
     function handleCancel() {
@@ -183,7 +200,12 @@ function Profile({setTheme, theme}) {
                     <div style={{ width: "100%" }}>
                         <p className="login-label">My Stats</p>
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                            {stats.map(function(stat) {
+                            {[
+                                { label: "Journal Entries", emoji: "📓", count: stats.journal },
+                                { label: "Sleep Entries", emoji: "😴", count: stats.sleep },
+                                { label: "Workout Entries", emoji: "💪", count: stats.workout },
+                                { label: "Growth Entries", emoji: "🌱", count: stats.growth },
+                            ].map(function(stat) {
                                 return (
                                     <div key={stat.label} style={{
                                         background: "rgba(255,255,255,0.15)",

@@ -6,6 +6,7 @@ const SleepJournalSchema = new mongoose.Schema({
     waketime:{type:String, required:true},
     duration:{type:String},
     quality:{type:String, required:true},
+    restfulness:{type:Number},
     notes:{type:String, default:''},
     date:{type:Date, default:Date.now}
 })

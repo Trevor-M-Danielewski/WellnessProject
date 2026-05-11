@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import api from "./api";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const DAYS_SHORT = ["S", "M", "T", "W", "T", "F", "S"];
@@ -16,6 +16,8 @@ const moods = [
     { label: "Angry", emoji: "😠" }, { label: "Hopeful", emoji: "🌟" },
     { label: "Overwhelmed", emoji: "🤯" }, { label: "Calm", emoji: "😌" },
 ];
+
+const restfulLabels = ["Exhausted", "Sleepy", "Rested", "Well Rested"];
 
 const moodColors = {
     "Happy": "#5cb85c", "Excited": "#5cb85c", "Hopeful": "#5cb85c", "Grateful": "#5cb85c",
@@ -89,7 +91,7 @@ function WeekView({ year, month, entryMap, today, weekOffset }) {
                             {entry ? <div style={{ fontSize: "0.85rem", color: "white", lineHeight: 1.7, textShadow: "0 1px 2px rgba(0,0,0,0.4)" }}>
                                 <div>{moodObj ? moodObj.emoji : ""} <strong>{entry.mood}</strong></div>
                                 {entry.activities && entry.activities.length > 0 && <div>{entry.activities.map(a => a.name).join(", ")}</div>}
-                                {entry.restedRating && <div>😴 Rested: {entry.restedRating}/5</div>}
+                                {typeof entry.restedRating === "number" && <div>😴 {restfulLabels[entry.restedRating]}</div>}
                                 {entry.journalText && <div style={{ marginTop: "6px", fontStyle: "italic", opacity: 0.9 }}>{entry.journalText.slice(0, 80)}{entry.journalText.length > 80 ? "..." : ""}</div>}
                             </div> : <div className="cal-text" style={{ fontSize: "0.8rem", opacity: 0.4, marginTop: "8px" }}>No entry</div>}
                         </div>
@@ -115,7 +117,7 @@ function DayView({ year, month, entryMap, today, dayOffset }) {
             <div style={{ flex: 1, borderRadius: "12px", background: entry ? (moodColors[entry.mood] || "#f0ad4e") : "rgba(255,255,255,0.06)", padding: "24px", border: "1px solid rgba(255,255,255,0.15)", display: "flex", flexDirection: "column", gap: "12px" }}>
                 {entry ? <>
                     <p style={{ color: "white", fontSize: "1.2rem", margin: 0, textShadow: "0 1px 2px rgba(0,0,0,0.4)" }}>{moodObj ? moodObj.emoji : ""} <strong>{entry.mood}</strong></p>
-                    {entry.restedRating && <p style={{ color: "white", fontSize: "1rem", margin: 0, textShadow: "0 1px 2px rgba(0,0,0,0.4)" }}>😴 Rested: {entry.restedRating}/5</p>}
+                    {typeof entry.restedRating === "number" && <p style={{ color: "white", fontSize: "1rem", margin: 0, textShadow: "0 1px 2px rgba(0,0,0,0.4)" }}>😴 {restfulLabels[entry.restedRating]}</p>}
                     {entry.activities && entry.activities.length > 0 && <p style={{ color: "white", fontSize: "1rem", margin: 0, textShadow: "0 1px 2px rgba(0,0,0,0.4)" }}>🏃 {entry.activities.map(a => a.name).join(", ")}</p>}
                     {entry.journalText && <p style={{ color: "white", fontSize: "1rem", margin: 0, lineHeight: 1.6, textShadow: "0 1px 2px rgba(0,0,0,0.4)", fontStyle: "italic" }}>"{entry.journalText}"</p>}
                 </> : <p className="cal-text" style={{ opacity: 0.5, fontSize: "1rem" }}>No journal entry for this day.</p>}
@@ -137,7 +139,7 @@ function DailyJournalCalendar() {
 
     useEffect(() => {
         if (userId) {
-            axios.get(`http://localhost:5000/journal/${userId}`)
+            api.get(`/journal/${userId}`)
             .then(res => setEntryMap(buildEntryMap(res.data)))
             .catch(err => console.log(err));
         }
@@ -170,7 +172,7 @@ function DailyJournalCalendar() {
     }
 
     return (
-        <div style={{ minHeight: "100vh", width: "100%", boxSizing: "border-box", padding: "16px 20px", fontFamily: "Shrikhand, sans-serif", display: "flex", flexDirection: "column" }}>
+        <div style={{ minHeight: "100vh", width: "100%", boxSizing: "border-box", padding: "32px 40px", fontFamily: "Shrikhand, sans-serif", display: "flex", flexDirection: "column" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px", flexWrap: "wrap", gap: "12px" }}>
                 <button className="back-btn" onClick={() => navigate("/journal")}>← Back</button>
                 <h1 className="home-title" style={{ fontSize: "2rem", margin: 0, flex: 1, textAlign: "center" }}>Journal Your Day — Calendar View</h1>

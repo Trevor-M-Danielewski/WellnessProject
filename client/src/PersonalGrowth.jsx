@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import api from "./api";
 
 const defaultHabits = [
     "Exercise", "Read", "Meditate", "Drink Water",
@@ -15,34 +15,9 @@ const progressOptions = [
     { label: "Crushed It", emoji: "🏆" },
 ];
 
-// Hardcoded mock data — swap in real DB data when ready
-const weeklyHabitsMock = [
-    { day: "Mon", count: 5 },
-    { day: "Tue", count: 3 },
-    { day: "Wed", count: 6 },
-    { day: "Thu", count: 4 },
-    { day: "Fri", count: 2 },
-    { day: "Sat", count: 7 },
-    { day: "Sun", count: 5 },
-];
-
-const habitBreakdownMock = [
-    { name: "Drink Water", pct: 90, emoji: "💧" },
-    { name: "Exercise",    pct: 75, emoji: "🏃" },
-    { name: "Read",        pct: 60, emoji: "📚" },
-    { name: "Meditate",    pct: 48, emoji: "🧘" },
-    { name: "Journal",     pct: 35, emoji: "📝" },
-];
-
-const goalTrendMock = [
-    { month: "Jan", avg: 3 },
-    { month: "Feb", avg: 5 },
-    { month: "Mar", avg: 4 },
-    { month: "Apr", avg: 7 },
-];
 
 function GoalLineChart({ data }) {
-    const maxVal = 10;
+    const maxVal = Math.max(...data.map(d => d.avg), 1);
     const w = 260;
     const h = 90;
     const padX = 16;
@@ -92,11 +67,53 @@ function PersonalGrowth() {
 
     useEffect(() => {
         if (userId) {
-            axios.get(`http://localhost:5000/growth/${userId}`)
+            api.get(`/growth/${userId}`)
                 .then(res => setEntries(res.data))
                 .catch(err => console.log(err));
         }
     }, [userId]);
+
+    const weeklyHabitsData = (() => {
+        const today = new Date();
+        return Array.from({ length: 7 }, (_, i) => {
+            const d = new Date(today);
+            d.setDate(today.getDate() - (6 - i));
+            const label = d.toLocaleDateString("en-US", { weekday: "short" });
+            const entry = entries.find(e => new Date(e.date).toDateString() === d.toDateString());
+            return { day: label, count: entry ? (entry.habits?.length || 0) : 0 };
+        });
+    })();
+
+    const habitBreakdownData = (() => {
+        if (entries.length === 0) return [];
+        const counts = {};
+        entries.forEach(e => (e.habits || []).forEach(h => { counts[h.name] = (counts[h.name] || 0) + 1; }));
+        return Object.entries(counts)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(([name, count]) => ({ name, pct: Math.round((count / entries.length) * 100), emoji: "✅" }));
+    })();
+
+    const goalTrendData = (() => {
+        if (entries.length === 0) return [{ month: "—", avg: 0 }];
+        const monthMap = {};
+        entries.forEach(e => {
+            const d = new Date(e.date);
+            const key = `${d.getFullYear()}-${d.getMonth()}`;
+            const label = d.toLocaleDateString("en-US", { month: "short" });
+            if (!monthMap[key]) monthMap[key] = { month: label, avg: 0, sort: d.getFullYear() * 12 + d.getMonth() };
+            monthMap[key].avg += (e.goals || []).filter(g => g.done).length;
+        });
+        return Object.values(monthMap).sort((a, b) => a.sort - b.sort).slice(-4);
+    })();
+
+    const now = new Date();
+    const goalsThisMonth = entries
+        .filter(e => { const d = new Date(e.date); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear(); })
+        .reduce((sum, e) => sum + (e.goals || []).filter(g => g.done).length, 0);
+
+    const todayEntry = entries.find(e => new Date(e.date).toDateString() === now.toDateString());
+    const habitsToday = todayEntry ? (todayEntry.habits?.length || 0) : 0;
 
     function addGoal() {
         if (!goalInput.trim()) return;
@@ -132,8 +149,8 @@ function PersonalGrowth() {
             motivationalNote,
         };
 
-        axios.post("http://localhost:5000/growth", newEntry)
-            .then(() => axios.get(`http://localhost:5000/growth/${userId}`))
+        api.post("/growth", newEntry)
+            .then(() => api.get(`/growth/${userId}`))
             .then(res => {
                 setEntries(res.data);
                 setGoals([]);
@@ -303,9 +320,9 @@ function PersonalGrowth() {
                     {/* Quick stats */}
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px" }}>
                         {[
-                            { label: "Streak", value: "8 days", sub: "keep going!", icon: "🔥" },
-                            { label: "Goals Done", value: "12", sub: "this month", icon: "✅" },
-                            { label: "Habits", value: "6/8", sub: "today", icon: "🌱" },
+                            { label: "Entries", value: `${entries.length}`, sub: "total logged", icon: "🔥" },
+                            { label: "Goals Done", value: `${goalsThisMonth}`, sub: "this month", icon: "✅" },
+                            { label: "Habits", value: `${habitsToday}/${defaultHabits.length}`, sub: "today", icon: "🌱" },
                         ].map(s => (
                             <div key={s.label} className="home-card" style={{ padding: "12px 8px", gap: "4px" }}>
                                 <div style={{ fontSize: "1.4rem" }}>{s.icon}</div>
@@ -319,8 +336,8 @@ function PersonalGrowth() {
                     <div className="home-card" style={{ padding: "14px 16px", alignItems: "stretch", gap: "8px" }}>
                         <p className="login-label" style={{ fontSize: "0.9rem", margin: 0 }}>📅 Weekly Habits</p>
                         <div style={{ display: "flex", alignItems: "flex-end", gap: "6px", height: "80px" }}>
-                            {weeklyHabitsMock.map(function(d) {
-                                const maxBar = Math.max(...weeklyHabitsMock.map(x => x.count), 1);
+                            {weeklyHabitsData.map(function(d) {
+                                const maxBar = Math.max(...weeklyHabitsData.map(x => x.count), 1);
                                 const barH = d.count > 0 ? Math.max((d.count / maxBar) * 60, 10) : 4;
                                 return (
                                     <div key={d.day} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", gap: "4px", height: "100%" }}>
@@ -345,7 +362,7 @@ function PersonalGrowth() {
                     <div className="home-card" style={{ padding: "14px 16px", alignItems: "stretch", gap: "8px" }}>
                         <p className="login-label" style={{ fontSize: "0.9rem", margin: 0 }}>🏆 Habit Consistency</p>
                         <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
-                            {habitBreakdownMock.map(function(h) {
+                            {habitBreakdownData.map(function(h) {
                                 return (
                                     <div key={h.name} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                                         <span style={{ width: "20px", textAlign: "center", fontSize: "0.9rem" }}>{h.emoji}</span>
@@ -362,7 +379,7 @@ function PersonalGrowth() {
                     {/* Goals completed trend */}
                     <div className="home-card" style={{ padding: "14px 16px", alignItems: "stretch", gap: "6px" }}>
                         <p className="login-label" style={{ fontSize: "0.9rem", margin: 0 }}>📈 Goals Completed Trend</p>
-                        <GoalLineChart data={goalTrendMock} />
+                        <GoalLineChart data={goalTrendData} />
                     </div>
 
                     {/* Past entries */}

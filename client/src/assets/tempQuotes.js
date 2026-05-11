@@ -27,7 +27,6 @@ const quotes = [
     { text: "The obstacle is the way.", author: "Ryan Holiday" },
     { text: "Discipline is destiny.", author: "Ryan Holiday" },
     { text: "Amor Fati.", author: "Friedrich Nietzsche" },
-    { text: "A life enriched with learning every day is a life well-lived.", author: "Trevor Danielewski" },
     { text: "Awareness, not age, leads to wisdom.", author: "Publilius Syrus" },
     { text: "There is no genius without a touch of madness.", author: "Aristotle" },
     { text: "Freedom is not procured by a full enjoyment of what is desired, but by controlling the desire.", author: "Epictetus" },

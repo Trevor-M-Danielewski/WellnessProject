@@ -1,5 +1,6 @@
-import React, {useState} from "react";
+import React, {useState, useEffect} from "react";
 import { useNavigate } from "react-router-dom";
+import api from "./api";
 import SettingsIcon from "./assets/profile.svg";
 
 // Temporary quote generator
@@ -39,8 +40,55 @@ const navItems = [
 function Home() {
     const navigate = useNavigate();
 
+    const userId = localStorage.getItem("userId");
+    const userName = localStorage.getItem("userName");
+
     // State monitors whether Settings are being accessed
     const [settingsOpen, setSettingsOpen] = useState(false);
+    const [quickNote, setQuickNote] = useState("");
+
+    // Graph data state — starts empty, filled from DB
+    const [moodData, setMoodData] = useState({ labels: [], values: [] });
+    const [sleepData, setSleepData] = useState({ labels: [], values: [] });
+    const [workoutData, setWorkoutData] = useState({ labels: [], values: [] });
+
+    const moodScores = {
+        "Happy": 5, "Excited": 5, "Hopeful": 5, "Grateful": 5, "Loved": 5,
+        "Calm": 4, "Neutral": 3, "Confused": 3, "Tired": 2,
+        "Worried": 2, "Anxious": 2, "Sad": 1, "Frustrated": 1,
+        "Stressed": 1, "Angry": 1, "Overwhelmed": 1,
+    };
+
+    useEffect(() => {
+        if (userId) {
+            api.get(`/recent/${userId}`)
+            .then(res => {
+                const { journal, sleep, workout } = res.data;
+
+                // Mood: map mood label to a score 1-5
+                setMoodData({
+                    labels: journal.map(e => new Date(e.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })).reverse(),
+                    values: journal.map(e => moodScores[e.mood] || 3).reverse(),
+                });
+
+                // Sleep: use duration hours
+                setSleepData({
+                    labels: sleep.map(e => new Date(e.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })).reverse(),
+                    values: sleep.map(e => {
+                        const match = e.duration ? e.duration.match(/(\d+)h/) : null;
+                        return match ? parseInt(match[1]) : 0;
+                    }).reverse(),
+                });
+
+                // Workout: use duration in minutes
+                setWorkoutData({
+                    labels: workout.map(e => new Date(e.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })).reverse(),
+                    values: workout.map(e => e.duration || 0).reverse(),
+                });
+            })
+            .catch(err => console.log(err));
+        }
+    }, [userId]);
 
     // Quote Generation
     const daily = getDailyQuote();
@@ -53,6 +101,7 @@ function Home() {
 
     // Handling for navigation at the settings icon
     function handleLogout() {
+        localStorage.clear();
         navigate("/login");
     }
     function handleProfile(){
@@ -124,7 +173,7 @@ function Home() {
                 </div>
                 <div className="nav-bar">
                     <div>
-                        <h1 className="home-title">Welcome to DayByDay</h1>
+                        <h1 className="home-title">Welcome{userName ? `, ${userName}` : " to DayByDay"}</h1>
                         <p className="home-subtitle">Today is: {todaysDate()}</p>
                     </div>
                     {navItems.map((item) => (
@@ -144,10 +193,10 @@ function Home() {
                         <div className="home-graph" style={{ height:'150px', width:"100%", minWidth: 0, overflow: "hidden" }}>
                             <Line
                                 data={{
-                                    labels: ['Two Days Ago', 'Yesterday', 'Today'],
+                                    labels: moodData.labels.length > 0 ? moodData.labels : ['No data yet'],
                                     datasets: [{
                                         label: "Mood",
-                                        data: [2, 5, 3],
+                                        data: moodData.values.length > 0 ? moodData.values : [0],
                                         fill: false,
                                         borderColor: lineColor,
                                         tension: 0.1
@@ -163,10 +212,10 @@ function Home() {
                         <div className="home-graph" style={{ height:'150px', width:"100%", minWidth: 0, overflow: "hidden" }}>
                             <Line
                                 data={{
-                                    labels: ['Two Days Ago', 'Yesterday', 'Today'],
+                                    labels: sleepData.labels.length > 0 ? sleepData.labels : ['No data yet'],
                                     datasets: [{
                                         label: "Sleep",
-                                        data: [8, 5, 6],
+                                        data: sleepData.values.length > 0 ? sleepData.values : [0],
                                         fill: false,
                                         borderColor: lineColor,
                                         tension: 0.1
@@ -182,10 +231,10 @@ function Home() {
                         <div className="home-graph" style={{ height:'150px', width:"100%", minWidth: 0, overflow: "hidden" }}>
                             <Line
                                 data={{
-                                    labels: ['Two Days Ago', 'Yesterday', 'Today'],
+                                    labels: workoutData.labels.length > 0 ? workoutData.labels : ['No data yet'],
                                     datasets: [{
                                         label: "Workout",
-                                        data: [42, 35, 52],
+                                        data: workoutData.values.length > 0 ? workoutData.values : [0],
                                         fill: false,
                                         borderColor: lineColor,
                                         tension: 0.1
@@ -200,9 +249,22 @@ function Home() {
                 <div className="nav-bottom-bar">
                     <div className="nav-card" style={{ gridColumn: '2 / 4' }}>
                         <span className="nav-card-label">Got something on your mind?</span>
-                        <textarea className="journal-text" placeholder="Write about it..." rows="10" cols="50" maxLength="400"></textarea>
+                        <textarea
+                            className="journal-text"
+                            placeholder="Write about it..."
+                            rows="10"
+                            cols="50"
+                            maxLength="400"
+                            value={quickNote}
+                            onChange={(e) => setQuickNote(e.target.value)}
+                        ></textarea>
                         <div style={{display: "flex", flexDirection: "row", padding: "5px"}}>
-                            <div className="back-btn">Submit</div>
+                            <div className="back-btn" onClick={() => {
+                                if (quickNote.trim()) {
+                                    localStorage.setItem("quickNote", quickNote.trim());
+                                }
+                                navigate("/journal");
+                            }}>Submit</div>
                         </div>
                     </div>
                     <div className="nav-card" style={{ gridColumn: '4 / 6', justifyContent: "center", }}>
