@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import api from "./api";
+import api from "./Api";
 
 function Profile({setTheme, theme}) {
     const navigate = useNavigate();

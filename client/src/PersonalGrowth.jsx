@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import api from "./api";
+import api from "./Api";
 // test for pushing issue
 const defaultHabits = [
     "Exercise", "Read", "Meditate", "Drink Water",
