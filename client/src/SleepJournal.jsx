@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "./api";
-
+// test for pushing issue
 const qualityOptions = [
     { label: "Terrible", emoji: "😵" },
     { label: "Poor", emoji: "😞" },
@@ -34,8 +34,10 @@ function LineChart({ data }) {
     const plotH = h - padY * 2 - 14;
 
     const pts = data.map(function(d, i) {
+        const xMultiplier = data.length > 1 ? (i / (data.length - 1)) : 0.5;
+
         return {
-            x: padX + (i / (data.length - 1)) * plotW,
+            x: padX + xMultiplier * plotW,
             y: padY + plotH - (d.avg / maxVal) * plotH,
         };
     });
@@ -193,8 +195,6 @@ function SleepJournal() {
         })
         .catch(err => console.log(err))
     }
-
-    const maxBar = 10;
 
     return (
         <div className="home-container" style={{ padding: "40px 20px", display: "flex", flexDirection: "column", gap: "24px" }}>
